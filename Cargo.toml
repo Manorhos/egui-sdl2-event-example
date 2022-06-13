@@ -1,0 +1,15 @@
+[package]
+name = "egui-sdl2-event-example"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sdl2 = {version= "0.35.2", features = ["raw-window-handle", "static-link", "use-pkgconfig"] }
+egui-sdl2-event = "0.1.0"
+egui-wgpu = "0.18.0"
+egui = "0.18.1"
+wgpu = "0.12.0"
+pollster = "0.2.5"
+
+
+
