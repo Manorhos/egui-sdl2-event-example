@@ -1,15 +1,12 @@
 mod frame_timer;
-use std::iter;
 use std::sync::Arc;
-use std::time::Instant;
 use sdl2::{Sdl, VideoSubsystem};
 use sdl2::event::{Event, WindowEvent};
-use sdl2::keyboard::{Keycode, Mod};
-use sdl2::mouse::{Cursor, MouseButton, SystemCursor};
+use sdl2::keyboard::{Keycode};
 use sdl2::video::Window;
-use wgpu::{Backend, Device, Queue, Surface, SurfaceConfiguration};
+use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 use core::default::Default;
-use egui::{Context, FontDefinitions, FullOutput, Key, Modifiers, PointerButton, Pos2, RawInput, Rect, Rgba};
+use egui::{Rgba};
 use egui::mutex::RwLock;
 use egui_wgpu::renderer;
 use egui_wgpu::renderer::RenderPass;
@@ -64,7 +61,7 @@ fn init_sdl(width: u32, height: u32) -> WGPUSDL2 {
         Err(e) => panic!("{}", e.to_string()),
     };
 
-    let mut config = wgpu::SurfaceConfiguration {
+    let config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         format: surface.get_preferred_format(&adapter).unwrap(),
         width,
@@ -100,9 +97,7 @@ fn paint_and_update_textures(
         Err(wgpu::SurfaceError::Outdated) => {
             return;
         }
-        Err(e) => {
-            return;
-        }
+        Err(_) => { return; }
     };
     let output_view = output_frame
         .texture
@@ -166,12 +161,11 @@ fn main() {
     let mut sys = init_sdl(INITIAL_WIDTH, INITIAL_HEIGHT);
     let mut event_pump = sys.sdl_context.event_pump().expect("Cannot create SDL2 event pump");
 
-    let mut egui_ctx = egui::Context::default();
-    let mut egui_rpass = Arc::new(RwLock::new(RenderPass::new(&sys.device, sys.surface_config.format, 1)));
+    let egui_ctx = egui::Context::default();
+    let egui_rpass = Arc::new(RwLock::new(RenderPass::new(&sys.device, sys.surface_config.format, 1)));
 
     let mut frame_timer = FrameTimer::new();
 
-    let ddpi = sys.sdl_window.subsystem().display_dpi(0).unwrap().0;
     let mut egui_sdl2_state = EguiSDL2State::new(INITIAL_WIDTH, INITIAL_HEIGHT, 1.0);
 
     let mut running_time: f64 = 0.0;
