@@ -5,7 +5,12 @@ with [egui-wgpu](https://github.com/emilk/egui/tree/master/egui-wgpu) as the bac
 and [egui-sdl2-event](https://github.com/kaphula/egui-sdl2-event) as the event handler.
 
 Notice that if you want to render the egui on top of your existing wgpu application properly using `egui-wgpu` you
-may have to submit the egui rendering along with everything else like this: `queue.submit([graphics_encoder, egui_encoder])`. In addition to that, you must set
+may have to submit the egui rendering along with everything else like this: 
+```rust 
+queue.submit([graphics_encoder.finish(), egui_encoder.finish()])
+``` 
+
+In addition to that, you must set
 the clear color in the `execute` function to `None` so that the gui will be additively blended on top of your other graphics:
 
 ```rust
