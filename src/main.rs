@@ -61,9 +61,11 @@ fn init_sdl(width: u32, height: u32) -> WGPUSDL2 {
         Err(e) => panic!("{}", e.to_string()),
     };
 
+    // let format = surface.get_preferred_format(&adapter).unwrap();
+    let format = surface.get_supported_formats(&adapter)[0];
     let config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format: surface.get_preferred_format(&adapter).unwrap(),
+        format: format,
         width,
         height,
         present_mode: wgpu::PresentMode::Mailbox,
@@ -205,22 +207,17 @@ fn main() {
 
         let full_output = egui_ctx.run(egui_sdl2_state.raw_input.take(), |ctx| {
             egui::Window::new("Settings").resizable(true).vscroll(true).show(&ctx, |ui| {
-                ui.label("Welcome!");
-                ui.label("Welcome!");
-                ui.label("Welcome!");
-                ui.label("Welcome!");
-                ui.label("Welcome!");
-                ui.label("Welcome!");
-                ui.label("Welcome!");
-                ui.label("Welcome!");
-                ui.label("Welcome!");
-                ui.label("Welcome!");
-                ui.label("Welcome!");
-                ui.label("Welcome!");
-                ui.label("Welcome!");
-                ui.label("Welcome!");
-                ui.label("Welcome!");
-                ui.label("Welcomeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee!");
+                ui.label("This");
+                ui.label("is");
+                ui.label("a");
+                ui.label("long");
+                ui.label("list");
+                ui.label("of");
+                ui.label("labels");
+                ui.label("to");
+                ui.label("demonstrate");
+                ui.label("scrolling!");
+
 
                 if ui.button("Press me").clicked() {
                     println!("you pressed me!")
@@ -232,7 +229,8 @@ fn main() {
 
         egui_sdl2_state.process_output(&sys.sdl_window, &full_output.platform_output);
         let tris = egui_ctx.tessellate(full_output.shapes);
-        if (full_output.needs_repaint) {
+
+        if full_output.repaint_after.is_zero() {
             paint_and_update_textures(&sys.device,
                                       &sys.queue,
                                       &sys.surface,
@@ -243,6 +241,8 @@ fn main() {
                                       &tris,
                                       &full_output.textures_delta)
         }
+
+
         frame_timer.time_stop()
     }
 }
