@@ -1,4 +1,4 @@
-use sdl2::sys::{Uint32};
+use sdl2::sys::Uint32;
 pub struct FrameTimer {
     last_time: u32,
     frame_time: u32,
@@ -21,7 +21,9 @@ impl FrameTimer {
 
     fn time_now(&self) -> Uint32 {
         #[allow(unsafe_code)]
-        return unsafe { sdl2::sys::SDL_GetTicks() };
+        unsafe {
+            sdl2::sys::SDL_GetTicks()
+        }
     }
 
     pub fn time_start(&mut self) {
