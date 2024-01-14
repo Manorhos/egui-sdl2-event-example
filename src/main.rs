@@ -5,7 +5,7 @@ use egui::mutex::RwLock;
 use egui::Rgba;
 use egui_sdl2_event::EguiSDL2State;
 use egui_wgpu::renderer;
-use egui_wgpu::renderer::RenderPass;
+use egui_wgpu::renderer::Renderer;
 use sdl2::event::{Event, WindowEvent};
 use sdl2::keyboard::Keycode;
 use sdl2::video::Window;
@@ -37,9 +37,9 @@ fn init_sdl(width: u32, height: u32) -> WGPUSDL2 {
         .map_err(|e| e.to_string())
         .expect("Cannot create SDL2 window!");
 
-    let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+    let instance = wgpu::Instance::default();
     #[allow(unsafe_code)]
-    let surface = unsafe { instance.create_surface(&window) };
+    let surface = unsafe { instance.create_surface(&window).unwrap() };
     let adapter_opt = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::HighPerformance,
         force_fallback_adapter: false,
@@ -62,15 +62,7 @@ fn init_sdl(width: u32, height: u32) -> WGPUSDL2 {
         Err(e) => panic!("{}", e.to_string()),
     };
 
-    // let format = surface.get_preferred_format(&adapter).unwrap();
-    let format = surface.get_supported_formats(&adapter)[0];
-    let config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format,
-        width,
-        height,
-        present_mode: wgpu::PresentMode::Mailbox,
-    };
+    let config = surface.get_default_config(&adapter, width, height).unwrap();
     surface.configure(&device, &config);
 
     WGPUSDL2 {
@@ -89,7 +81,7 @@ fn paint_and_update_textures(
     queue: &Queue,
     surface: &Surface,
     surface_config: &SurfaceConfiguration,
-    egui_rpass: Arc<RwLock<RenderPass>>,
+    egui_renderer: Arc<RwLock<Renderer>>,
     pixels_per_point: f32,
     clear_color: egui::Rgba,
     clipped_primitives: &[egui::ClippedPrimitive],
@@ -104,9 +96,6 @@ fn paint_and_update_textures(
             return;
         }
     };
-    let output_view = output_frame
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("encoder"),
@@ -119,30 +108,48 @@ fn paint_and_update_textures(
     };
 
     {
-        let mut rpass = egui_rpass.write();
+        let mut renderer = egui_renderer.write();
         for (id, image_delta) in &textures_delta.set {
-            rpass.update_texture(device, queue, *id, image_delta);
+            renderer.update_texture(device, queue, *id, image_delta);
         }
 
-        rpass.update_buffers(device, queue, clipped_primitives, &screen_descriptor);
+        renderer.update_buffers(device, queue, &mut encoder, clipped_primitives, &screen_descriptor);
     }
 
-    // Record all render passes.
-    egui_rpass.read().execute(
-        &mut encoder,
-        &output_view,
-        clipped_primitives,
-        &screen_descriptor,
-        Some(wgpu::Color {
-            r: clear_color.r() as f64,
-            g: clear_color.g() as f64,
-            b: clear_color.b() as f64,
-            a: clear_color.a() as f64,
-        }),
-    );
+    {
+        let renderer = egui_renderer.read();
+
+        let frame_view = output_frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let (view, resolve_target) = (&frame_view, None);
+
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("egui_render"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: clear_color[0] as f64,
+                        g: clear_color[1] as f64,
+                        b: clear_color[2] as f64,
+                        a: clear_color[3] as f64,
+                    }),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+
+        renderer.render(&mut render_pass, clipped_primitives, &screen_descriptor);
+    }
 
     {
-        let mut rpass = egui_rpass.write();
+        let mut rpass = egui_renderer.write();
         for id in &textures_delta.free {
             rpass.free_texture(id);
         }
@@ -163,9 +170,10 @@ fn main() {
         .expect("Cannot create SDL2 event pump");
 
     let egui_ctx = egui::Context::default();
-    let egui_rpass = Arc::new(RwLock::new(RenderPass::new(
+    let egui_renderer = Arc::new(RwLock::new(Renderer::new(
         &sys.device,
         sys.surface_config.format,
+        None,
         1,
     )));
 
@@ -234,21 +242,19 @@ fn main() {
         });
 
         egui_sdl2_state.process_output(&sys.sdl_window, &full_output.platform_output);
-        let tris = egui_ctx.tessellate(full_output.shapes);
+        let tris = egui_ctx.tessellate(full_output.shapes, egui_sdl2_state.dpi_scaling);
 
-        if full_output.repaint_after.is_zero() {
-            paint_and_update_textures(
-                &sys.device,
-                &sys.queue,
-                &sys.surface,
-                &sys.surface_config,
-                egui_rpass.clone(),
-                egui_sdl2_state.dpi_scaling,
-                Rgba::from_rgb(0.0, 0.0, 0.0),
-                &tris,
-                &full_output.textures_delta,
-            )
-        }
+        paint_and_update_textures(
+            &sys.device,
+            &sys.queue,
+            &sys.surface,
+            &sys.surface_config,
+            egui_renderer.clone(),
+            egui_sdl2_state.dpi_scaling,
+            Rgba::from_rgb(0.0, 0.0, 0.0),
+            &tris,
+            &full_output.textures_delta,
+        );
 
         frame_timer.time_stop()
     }
